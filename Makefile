@@ -1,4 +1,5 @@
 CXXFLAGS += -std=c++11
+#CPPFLAGS += -DDEBUG
 
 pdp8:	PDP8.o main.o
 	g++ -o $@ $^
@@ -6,7 +7,7 @@ pdp8:	PDP8.o main.o
 	
 .PHONY:	run
 run: pdp8
-	./pdp8 > log
+	./pdp8
 	
 .PHONY:	clean
 clean:	

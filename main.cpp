@@ -1,82 +1,13 @@
 #include <cstdio>
 #include <fstream>
+#include <chrono>
+#include <thread>
 #include "PDP8.hpp"
 
 PDP8 pdp;
 
 int main() {
     pdp.reset();
-    
-    /*pdp.setSwitches(00010);
-    pdp.loadAddress();
-    pdp.setSwitches(00200);
-    pdp.deposit();
-    pdp.loadAddress();
-    pdp.setSwitches('H');
-    pdp.deposit(true);
-    pdp.setSwitches('e');
-    pdp.deposit(true);
-    pdp.setSwitches('l');
-    pdp.deposit(true);
-    pdp.deposit(true);
-    pdp.setSwitches('o');
-    pdp.deposit(true);
-    pdp.setSwitches(' ');
-    pdp.deposit(true);
-    pdp.setSwitches('f');
-    pdp.deposit(true);
-    pdp.setSwitches('r');
-    pdp.deposit(true);
-    pdp.setSwitches('o');
-    pdp.deposit(true);
-    pdp.setSwitches('m');
-    pdp.deposit(true);
-    pdp.setSwitches(' ');
-    pdp.deposit(true);
-    pdp.setSwitches('1');
-    pdp.deposit(true);
-    pdp.setSwitches('9');
-    pdp.deposit(true);
-    pdp.setSwitches('6');
-    pdp.deposit(true);
-    pdp.setSwitches('5');
-    pdp.deposit(true);
-    pdp.setSwitches('!');
-    pdp.deposit(true);
-    pdp.setSwitches('\n');
-    pdp.deposit(true);
-    
-    pdp.setSwitches(00400);
-    pdp.loadAddress();
-    pdp.setSwitches(07200); //0400 CLA
-    pdp.deposit(true);
-    pdp.setSwitches(06046); //0401 TLS
-    pdp.deposit(true);
-    pdp.setSwitches(06041); //0402 TSF
-    pdp.deposit(true);
-    pdp.setSwitches(05202); //0403 JMP 0402
-    pdp.deposit(true);
-    pdp.setSwitches(07200); //0404 CLA
-    pdp.deposit(true);
-    pdp.setSwitches(01410); //0405 TAD I Z 010
-    pdp.deposit(true);
-    pdp.setSwitches(07450); //0406 SNA
-    pdp.deposit(true);
-    pdp.setSwitches(05214); //0407 JMP 0414
-    pdp.deposit(true);
-    pdp.setSwitches(06046); //0410 TLS
-    pdp.deposit(true);
-    pdp.setSwitches(06041); //0411 TSF
-    pdp.deposit(true);
-    pdp.setSwitches(05211); //0412 JMP 0411
-    pdp.deposit(true);
-    pdp.setSwitches(05204); //0413 JMP 0404
-    pdp.deposit(true);
-    pdp.setSwitches(07402); //0414 HLT
-    pdp.deposit(true);
-    
-    pdp.setSwitches(00400);
-    pdp.loadAddress();*/
     
     pdp.setSwitches(07756);
     pdp.loadAddress();
@@ -117,71 +48,58 @@ int main() {
     pdp.deposit(true);
     pdp.setSwitches(0);
     pdp.deposit(true);
-    
     pdp.setSwitches(07756);
     pdp.loadAddress();
-
-
-/*	pdp.setSwitches(01000);
-	pdp.loadAddress();
-	
-	pdp.setSwitches(07240);
-	pdp.deposit(true);
-	pdp.setSwitches(03400);
-	pdp.deposit(true);
-	pdp.setSwitches(07402);
-	pdp.deposit(true);
-	
-	pdp.setSwitches(0);
-	pdp.loadAddress();
-	pdp.setSwitches(00200);
-	pdp.deposit();
-	
-	pdp.setSwitches(01000);
-	pdp.loadAddress();*/
-
     std::ifstream tape("binloader.rim", std::ios_base::in | std::ios_base::binary);
-
     while(!pdp.isHalted()) {
-        //printf("MS%d MA%05o MB%04o LAC%05o\n",pdp.getState(), pdp.getMA(), pdp.getMB(), pdp.getLAC() & 017777);
         pdp.step();
         if(pdp.isKeyReady()) {
             int c = tape.get();
-            //printf("<Tape feed: %02o>\n", c);
+            #ifdef DEBUG
+            printf("Tape feed %03o\n", c & 0777);
+            #endif
             if(c < 0) break;
             pdp.setKey(c);
         }
-        if(pdp.isPrintReady()) {
-            //printf("TTY: '%c'\n", pdp.getPrinted());
-        }
     }
-
     tape.close();
+    
+    puts("Switching tapes...");
     tape.open("hello.bin", std::ios_base::in | std::ios_base::binary);
-
     pdp.reset();
-    pdp.setSwitches(07756);
+    pdp.setSwitches(07777);
     pdp.loadAddress();
-
     while(!pdp.isHalted()) {
-        printf("MS%d MA%05o MB%04o LAC%05o\n",pdp.getState(), pdp.getMA(), pdp.getMB(), pdp.getLAC() & 017777);
         pdp.step();
         if(pdp.isKeyReady()) {
             int c = tape.get();
-            printf("<Tape feed: %02o>\n", c);
+            #ifdef DEBUG
+            printf("Tape feed %03o\n", c & 0777);
+            #endif
             if(c < 0) break;
             pdp.setKey(c);
         }
+    }
+    tape.close();
+    
+    puts("Executing...");
+    pdp.reset();
+    pdp.setSwitches(00200);
+    pdp.loadAddress();
+    while(!pdp.isHalted()) {
+        pdp.step();
         if(pdp.isPrintReady()) {
-            printf("TTY: '%c'\n", pdp.getPrinted());
+            int c = pdp.getPrinted();
+            if(c) putchar(c & 0177);
         }
     }
 
-    pdp.setSwitches(0);
+    
+    /*pdp.setSwitches(0);
     pdp.loadAddress();
     for(int i = 0; i < 4096; i++) {
         printf("%04o ", pdp.examine(true));
         if(i % 16 == 15) puts("");
-    }
+    }*/
     return 0;
 }

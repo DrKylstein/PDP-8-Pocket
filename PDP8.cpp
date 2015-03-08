@@ -1,3 +1,6 @@
+#ifdef DEBUG
+#include <cstdio>
+#endif
 #include "PDP8.hpp"
 
 #define DF_M 00007
@@ -127,21 +130,30 @@ void PDP8::step() {
             //get extended address
             _ma = _if_pc;
         
-            //advance
-            ADVANCE_PC;
+            #ifdef DEBUG
+            printf("%05o %05o", _if_pc, _l_ac & 017777);
+            #endif
         
             //get instruction word
             _mb = _ram[_ma];
             _ir = (_mb >> 9) & 7;
+        
+            ADVANCE_PC;
         
             //decide instruction type
             if(_ir == 6) { //IOT
                 if((_mb & 00770)==0) { //CPU op
                     switch(_mb & 7) {
                         case 1: //ION
+                            #ifdef DEBUG
+                            puts(" ION");
+                            #endif
                             _flags |= 1 << IE_S;
                             break;
                         case 2: //IOFF
+                            #ifdef DEBUG
+                            puts(" IOFF");
+                            #endif
                             _flags &= ~IE_S;
                             break;
                         #ifdef PDP8_E
@@ -177,14 +189,58 @@ void PDP8::step() {
                 } else { //peripheral op
                     _ms = IO_STATE;
                 }
-            } else if(_ir == 7) { //OPR
-                if(_mb & 00200) _l_ac &= LINK_M; //CLA
-                
+            } else if(_ir == 7) { //OPR                
                 if((_mb & 00400)==0) { //group 1
-                    if(_mb & 00100) _l_ac &= AC_M; //CLL
-                    if(_mb & 00040) _l_ac ^= AC_M; //CMA
-                    if(_mb & 00020) _l_ac ^= LINK_M; //CML
-                    if(_mb & 00001) _l_ac++; //IAC
+                    if(_mb & 00200) {
+                        #ifdef DEBUG
+                        printf(" CLA");
+                        #endif
+                        _l_ac &= LINK_M; //CLA
+                    }
+
+                    if(_mb & 00100) {
+                        #ifdef DEBUG
+                        printf(" CLL");
+                        #endif
+                        _l_ac &= AC_M; //CLL
+                    }
+                    if(_mb & 00040) {
+                        #ifdef DEBUG
+                        printf(" CMA");
+                        #endif
+                        _l_ac ^= AC_M; //CMA
+                    }
+                    if(_mb & 00020) {
+                        #ifdef DEBUG
+                        printf(" CML");
+                        #endif
+                        _l_ac ^= LINK_M; //CML
+                    }
+                    if(_mb & 00001) {
+                        #ifdef DEBUG
+                        printf(" IAC");
+                        #endif
+                        _l_ac++; //IAC
+                    }
+                    
+                    #ifdef DEBUG
+                    if(_mb & 00002) {
+                        if(_mb & 00010) {
+                            printf(" RTR");
+                        }
+                        if(_mb & 00004) {
+                            printf(" RTL");
+                        }
+                    } else {
+                        if(_mb & 00010) {
+                            printf(" RAR");
+                        }
+                        if(_mb & 00004) {
+                            printf(" RAL");
+                        }
+                    }
+                    #endif
+                    
                     for(int i = 0; i<((_mb & 00002) ? 2 : 1); i++) {
                         if(_mb & 00010) { //RAR / RTR
                             int16_t temp = _l_ac;
@@ -204,6 +260,17 @@ void PDP8::step() {
                     }
                     #endif
                 } else if((_mb & 00001)==0) { //group 2
+                    #ifdef DEBUG
+                        if(_mb & 00010) {
+                            if(_mb & 00100) printf(" SPA");
+                            if(_mb & 00040) printf(" SNA");
+                            if(_mb & 00020) printf(" SZL");
+                        } else {
+                            if(_mb & 00100 )printf(" SMA");
+                            if(_mb & 00040) printf(" SZA");
+                            if(_mb & 00020) printf(" SNL");
+                        }
+                    #endif
                     if(
                         (
                             ((_l_ac&04000) && (_mb&00100)) || //SMA/SPA
@@ -213,35 +280,109 @@ void PDP8::step() {
                     ) {
                         ADVANCE_PC;
                     }
+                    
+                    if(_mb & 00200) {
+                        #ifdef DEBUG
+                        printf(" CLA");
+                        #endif
+                        _l_ac &= LINK_M; //CLA
+                    }
+
                     if(_mb & 00004) { //OSR
+                        #ifdef DEBUG
+                        printf(" OSR");
+                        #endif
                         //TODO: is trapped in timeharing config
                         _l_ac |= _sr & 07777;
                     }
                     if(_mb & 00002) { //HLT
+                        #ifdef DEBUG
+                        printf(" HLT");
+                        #endif
                         //TODO: is trapped in timeharing config
                         _sr |= HALT_M;
                     }
                 } else {
+                    if(_mb & 00200) {
+                        #ifdef DEBUG
+                        printf(" CLA");
+                        #endif
+                        _l_ac &= LINK_M; //CLA
+                    }
+
                     if(_mb & 00120) { //MQA MQL / SWP
+                        #ifdef DEBUG
+                        printf(" MQA+MQL");
+                        #endif
                         //using mb as temp, not used any further this instruction
                         _mb = _mq; 
                         _mq = (_l_ac & AC_M);
                         _l_ac &= LINK_M;
                         _l_ac |= (_mb & AC_M);
                     } else {
-                        if(_mb & 00100) _l_ac |= (_mq & AC_M); //MQA
+                        if(_mb & 00100) {
+                            #ifdef DEBUG
+                            printf(" MQA");
+                            #endif
+                            _l_ac |= (_mq & AC_M); //MQA
+                        }
                         if(_mb & 00020) { //MQL
+                            #ifdef DEBUG
+                            printf(" MQL");
+                            #endif
                             _mq = (_l_ac & AC_M);
                             _l_ac &= LINK_M;
                         }
                     }
                 }
+                #ifdef DEBUG
+                    puts("");
+                #endif
             } else { //Memory instructions
-                _ma = (_mb & OFFSET_M) | (_if_pc & 077600);
+                #ifdef DEBUG
+                switch(_ir) {
+                    case 0: //AND
+                        printf(" AND");
+                        break;
+                    case 1: //TAD
+                        printf(" TAD");
+                        break;
+                    case 2: //ISZ
+                        printf(" ISZ");
+                        break;
+                    case 3: //DCA
+                        printf(" DCA");
+                        break;
+                    case 4: //JMS
+                        printf(" JMS");
+                        break;
+                    case 5: //JMP
+                        printf(" JMP");
+                        break;
+                }
+                #endif
+                _ma &= ~OFFSET_M;
+                _ma |= _mb & OFFSET_M;
                 //zero page
-                if((_mb & Z_M) == 0) _ma &= ~PAGE_M;
+                if((_mb & Z_M) == 0) {
+                    #ifdef DEBUG
+                    printf(" Z");
+                    #endif
+                    _ma &= ~PAGE_M;
+                }
                 
-                _ms = (_mb & I_M)? DEFER_STATE : EXECUTE_STATE;
+                if(_mb & I_M) {
+                    #ifdef DEBUG
+                    printf(" I");
+                    #endif
+                    _ms = DEFER_STATE;
+                } else {
+                    _ms = EXECUTE_STATE;
+                }
+                
+                #ifdef DEBUG
+                    printf(" %03o\n", _mb & OFFSET_M);
+                #endif
             }
             break;
             
@@ -249,7 +390,8 @@ void PDP8::step() {
             //autoincrement
             _mb = _ram[_ma];
             if((_ma & 07770) == 00010) {
-                _ram[_ma] = (_mb + 1) & 07777;
+                _mb++;
+                _ram[_ma] = _mb & 07777;
             }
             //fetch pointer
             _ma = (_mb & 07777) | ((_flags & DF_M) << 12);
@@ -281,6 +423,9 @@ void PDP8::step() {
                 
                 case 4: //JMS
                     _mb = _if_pc;
+                    //if indirect was used, _ma will be based on DF, force it to IF
+                    _if_pc = (_if_pc & IF_M) | ((_ma +1) & 07777);
+                    break;
                 case 5: //JMP
                     //if indirect was used, _ma will be based on DF, force it to IF
                     _if_pc = (_if_pc & IF_M) | (_ma & 07777);
@@ -322,12 +467,27 @@ void PDP8::step() {
                         _ttyFlags = (_ttyFlags & ~3) | (_l_ac & 3);
                     } else {
                     #endif
-                    if((_mb&1) && (_ttyFlags&TTYIN_M)) ADVANCE_PC; //KSF
+                    if(_mb&1) {
+                        #ifdef DEBUG
+                            printf(" KSF");
+                        #endif
+                        if(_ttyFlags&TTYIN_M) {
+                            ADVANCE_PC; //KSF
+                        }
+                    }
                     if(_mb&2) { //KCC
+                        #ifdef DEBUG
+                            printf(" KCC");
+                        #endif
                         _ttyFlags &= ~TTYIN_M;
                         _l_ac &= LINK_M;
                     }
-                    if(_mb&4) _l_ac |= _ttyIn; //KRS
+                    if(_mb&4) {
+                        #ifdef DEBUG
+                            printf(" KRS");
+                        #endif
+                        _l_ac |= _ttyIn; //KRS
+                    }
                     #ifdef PDP8_E
                     }
                     #endif
@@ -339,14 +499,32 @@ void PDP8::step() {
                         if(_ttyFlags&014) ADVANCE_PC;
                     } else {
                     #endif
-                    if((_mb&1) && (_ttyFlags&TTYOUT_M)) ADVANCE_PC; //TSF
-                    if(_mb&2) _ttyFlags &= ~TTYOUT_M; //TCF
-                    if(_mb&4) _ttyOut = _l_ac; //TPC
+                    if(_mb&1) {
+                        #ifdef DEBUG
+                            printf(" TSF");
+                        #endif
+                        if(_ttyFlags&TTYOUT_M) ADVANCE_PC; //TSF
+                    }
+                    if(_mb&2) {
+                        #ifdef DEBUG
+                            printf(" TCF");
+                        #endif
+                        _ttyFlags &= ~TTYOUT_M; //TCF
+                    }
+                    if(_mb&4) {
+                        #ifdef DEBUG
+                            printf(" TPC");
+                        #endif
+                        _ttyOut = _l_ac; //TPC
+                    }
                     #ifdef PDP8_E
                     }
                     #endif
                 break;
             }
+            #ifdef DEBUG
+                puts("");
+            #endif
             _ms = FETCH_STATE;
             break;
     }
