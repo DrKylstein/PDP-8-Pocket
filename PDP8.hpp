@@ -6,6 +6,10 @@
 #define PDP8_RAM_SIZE 4096
 #endif
 
+#ifndef PDP8_TTY_COUNT
+    #define PDP8_TTY_COUNT 2
+#endif
+
 class PDP8 {
     public:
         void reset();
@@ -22,10 +26,10 @@ class PDP8 {
         int getState();
         bool isHalted();
             
-        bool isKeyReady();
-        bool isPrintReady();
-        char getPrinted();
-        void setKey(char);
+        bool isOutputReady(int id = 0);
+        uint8_t getOutput(int id = 0);
+        bool isInputReady(int id = 0);
+        void setInput(uint8_t c, int id = 0);
 
         bool isReaderReady();
         bool isPunchReady();
@@ -47,12 +51,18 @@ class PDP8 {
         uint16_t _flags; //8bits
         uint8_t _ms; //2bits
         
-        char _ttyIn;
-        char _ttyOut;
-        uint8_t _ttyFlags; //4 bits
     
-        char _readBuf;
-        char _punchBuf;
+        struct Tty {
+            uint8_t in, out, flags, id;
+        };
+    
+        Tty _ttys[PDP8_TTY_COUNT];
+        
+        void _doTtyInOp(int id);
+        void _doTtyOutOp(int id);
+            
+        uint8_t _readBuf;
+        uint8_t _punchBuf;
         uint8_t _punchFlags;
         bool _readRequested;
 };

@@ -4,9 +4,7 @@
 #include <thread>
 #include "PDP8.hpp"
 
-PDP8 pdp;
-
-int main() {
+void bootstrap(PDP8& pdp, const char* filename) {
     pdp.reset();
     
     pdp.setSwitches(07756);
@@ -53,53 +51,46 @@ int main() {
     std::ifstream tape("binloader.rim", std::ios_base::in | std::ios_base::binary);
     while(!pdp.isHalted()) {
         pdp.step();
-        if(pdp.isKeyReady()) {
+        if(pdp.isInputReady()) {
             int c = tape.get();
-            #ifdef DEBUG
-            printf("Tape feed %03o\n", c & 0777);
-            #endif
             if(c < 0) break;
-            pdp.setKey(c);
+            pdp.setInput(c);
         }
     }
     tape.close();
     
-    puts("Switching tapes...");
-    tape.open("hello.bin", std::ios_base::in | std::ios_base::binary);
+    tape.open(filename, std::ios_base::in | std::ios_base::binary);
     pdp.reset();
     pdp.setSwitches(07777);
     pdp.loadAddress();
     while(!pdp.isHalted()) {
         pdp.step();
-        if(pdp.isKeyReady()) {
+        if(pdp.isInputReady()) {
             int c = tape.get();
-            #ifdef DEBUG
-            printf("Tape feed %03o\n", c & 0777);
-            #endif
             if(c < 0) break;
-            pdp.setKey(c);
+            pdp.setInput(c);
         }
     }
     tape.close();
+}
+
+int main() {
+    PDP8 pdp;
+    puts("Booting...");
+    bootstrap(pdp, "hello.bin");
     
-    puts("Executing...");
     pdp.reset();
-    pdp.setSwitches(00200);
+    pdp.setSwitches(0200);
     pdp.loadAddress();
+    puts("Running....");
     while(!pdp.isHalted()) {
         pdp.step();
-        if(pdp.isPrintReady()) {
-            int c = pdp.getPrinted();
+        if(pdp.isOutputReady(1)) {
+            int c = pdp.getOutput(1);
             if(c) putchar(c & 0177);
         }
+        //std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-
-    
-    /*pdp.setSwitches(0);
-    pdp.loadAddress();
-    for(int i = 0; i < 4096; i++) {
-        printf("%04o ", pdp.examine(true));
-        if(i % 16 == 15) puts("");
-    }*/
+    puts("\nDone.");
     return 0;
 }

@@ -1,5 +1,9 @@
 /PDP-8 PAL ASSEMBLY LANGUAGE PROGRAM TO PRINT HELLO WORLD!
 
+        NLS=6416
+        NSF=6411
+        FIXTAB
+
         *200                    /LOCATE PROGRAM STARTING AT ADDR 200
         AIX1=10                 /SETUP AUTOINDEX REGISTER 1
 
@@ -22,8 +26,8 @@ TTYO,   0                       /TTY OUTPUT ROUTINE. THE FIRST WORD OF
                                 /A SUBROUTINE MUST BE EMPTY (0) BECAUSE
                                 /THE JMS INSTRUCTION INSERTS THE RETURN
                                 /ADDR IN THIS WORD.
-        TLS                     /WRITE AC TO THE OUTPUT DEVICE (TTY)
-        TSF                     /IF TTY IS READY, SKIP NEXT INSTRUCTION.
+        NLS                     /WRITE AC TO THE OUTPUT DEVICE (TTY)
+        NSF                     /IF TTY IS READY, SKIP NEXT INSTRUCTION.
         JMP .-1                 /TTY IS NOT READY, SO CHECK AGAIN
         CLA                     /CLEAR AC
         JMP I TTYO              /RETURN TO CALLER
@@ -31,4 +35,4 @@ TTYO,   0                       /TTY OUTPUT ROUTINE. THE FIRST WORD OF
 CHRSTR, .                       /1ST WORD IS ADDR OF STRING
         "H;"E;"L;"L;"O;" ;"W;"O;"R;"L;"D;"!
         000                     /<EOT>
-
+$

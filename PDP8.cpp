@@ -44,25 +44,30 @@ void PDP8::reset() {
     _l_ac = 0;
     _if_pc = 0;
     _flags = 0;
-    _ttyFlags = TTYIE_M;
+    for(int i = 0; i < PDP8_TTY_COUNT; i++) {
+        _ttys[i].flags = TTYIE_M;
+    }
     _ms = FETCH_STATE;
     _sr &= ~HALT_M;
 }
 
-bool PDP8::isKeyReady() {
-    return (_ttyFlags & TTYIN_M) == 0;
+bool PDP8::isInputReady(int id) {
+    if(id < 0 || id > PDP8_TTY_COUNT) return false;
+    return (_ttys[id].flags & TTYIN_M) == 0;
 }
-bool PDP8::isPrintReady() {
-    return (_ttyFlags & TTYOUT_M) == 0;
+void PDP8::setInput(uint8_t c, int id) {
+    if(id < 0 || id > PDP8_TTY_COUNT) return;
+    _ttys[id].in = c;
+    _ttys[id].flags |= TTYIN_M;
 }
-char PDP8::getPrinted() {
-    char result = _ttyOut;
-    _ttyFlags |= TTYOUT_M;
-    return result;
+bool PDP8::isOutputReady(int id) {
+    if(id < 0 || id > PDP8_TTY_COUNT) return false;
+    return (_ttys[id].flags & TTYOUT_M) == 0;
 }
-void PDP8::setKey(char c) {
-    _ttyIn = c;
-    _ttyFlags |= TTYIN_M;
+uint8_t PDP8::getOutput(int id) {
+    uint8_t c = _ttys[id].out;
+    _ttys[id].flags |= TTYOUT_M;
+    return c;
 }
 
 
@@ -437,7 +442,7 @@ void PDP8::step() {
             
         case IO_STATE:
             switch((_mb >> 3) & 077) {
-                case 01: //high-speed tape reader
+                case 001: //high-speed tape reader
                     #ifdef PDP8_E
                     if((_mb & 7)==0) _punchFlags |= 1; //RPE
                     #endif
@@ -451,7 +456,7 @@ void PDP8::step() {
                         _readRequested = true;
                     }
                     break;
-                case 02: //high-speed tape punch
+                case 002: //high-speed tape punch
                     #ifdef PDP8_E
                     if((_mb & 7)==0) _punchFlags &= ~1; //PCE
                     #endif
@@ -460,73 +465,114 @@ void PDP8::step() {
                     if(_mb&4) _punchBuf = _l_ac; //PPC
                 break;
 
-                case 03: //keyboard
-                    #ifdef PDP8_E
-                    if((_mb & 7)==0) _ttyFlags &= ~TTYIN_M; //KCF
-                    if((_mb & 7)==5) { //KIE
-                        _ttyFlags = (_ttyFlags & ~3) | (_l_ac & 3);
-                    } else {
-                    #endif
-                    if(_mb&1) {
-                        #ifdef DEBUG
-                            printf(" KSF");
-                        #endif
-                        if(_ttyFlags&TTYIN_M) {
-                            ADVANCE_PC; //KSF
-                        }
-                    }
-                    if(_mb&2) { //KCC
-                        #ifdef DEBUG
-                            printf(" KCC");
-                        #endif
-                        _ttyFlags &= ~TTYIN_M;
-                        _l_ac &= LINK_M;
-                    }
-                    if(_mb&4) {
-                        #ifdef DEBUG
-                            printf(" KRS");
-                        #endif
-                        _l_ac |= _ttyIn; //KRS
-                    }
-                    #ifdef PDP8_E
-                    }
-                    #endif
+                //console tty
+                case 003:
+                    _doTtyInOp(0);
                     break;
-                case 04: //teleprinter
-                    #ifdef PDP8_E
-                    if((_mb & 7)==0) _ttyFlags |= TTYOUT_M; //TFL
-                    if((_mb & 7)==5) { //TSK
-                        if(_ttyFlags&014) ADVANCE_PC;
-                    } else {
-                    #endif
-                    if(_mb&1) {
-                        #ifdef DEBUG
-                            printf(" TSF");
-                        #endif
-                        if(_ttyFlags&TTYOUT_M) ADVANCE_PC; //TSF
-                    }
-                    if(_mb&2) {
-                        #ifdef DEBUG
-                            printf(" TCF");
-                        #endif
-                        _ttyFlags &= ~TTYOUT_M; //TCF
-                    }
-                    if(_mb&4) {
-                        #ifdef DEBUG
-                            printf(" TPC");
-                        #endif
-                        _ttyOut = _l_ac; //TPC
-                    }
-                    #ifdef PDP8_E
-                    }
-                    #endif
-                break;
+                case 004:
+                    _doTtyOutOp(0);
+                    break;
+                //second tty
+                case 040:
+                    _doTtyInOp(1);
+                    break;
+                case 041:
+                    _doTtyOutOp(1);
+                    break;
+                //serial printer
+                case 065:
+                    _doTtyInOp(2);
+                    break;
+                case 066:
+                    _doTtyOutOp(2);
+                    break;
+                //VT78 #1
+                case 030:
+                    _doTtyInOp(3);
+                    break;
+                case 031:
+                    _doTtyOutOp(3);
+                    break;
+                //VT78 #2
+                case 032:
+                    _doTtyInOp(4);
+                    break;
+                case 033:
+                    _doTtyOutOp(4);
+                    break;
+
             }
             #ifdef DEBUG
                 puts("");
             #endif
+        
             _ms = FETCH_STATE;
+        
             break;
     }
+}
+
+void PDP8::_doTtyInOp(int id) {
+    if(id > PDP8_TTY_COUNT) return;
+    #ifdef PDP8_E
+    if((_mb & 7)==0) _ttys[id].flags &= ~TTYIN_M; //KCF
+    if((_mb & 7)==5) { //KIE
+        _ttys[id].flags = (_ttys[id].flags & ~3) | (_l_ac & 3);
+    } else {
+    #endif
+    if(_mb&1) {
+        #ifdef DEBUG
+            printf(" KSF(%d)", id);
+        #endif
+        if(_ttys[id].flags&TTYIN_M) {
+            ADVANCE_PC; //KSF
+        }
+    }
+    if(_mb&2) { //KCC
+        #ifdef DEBUG
+            printf(" KCC(%d)", id);
+        #endif
+        _ttys[id].flags &= ~TTYIN_M;
+        _l_ac &= LINK_M;
+    }
+    if(_mb&4) {
+        #ifdef DEBUG
+            printf(" KRS(%d)", id);
+        #endif
+        _l_ac |= _ttys[id].in; //KRS
+    }
+    #ifdef PDP8_E
+    }
+    #endif
+}
+void PDP8::_doTtyOutOp(int id) {
+    if(id > PDP8_TTY_COUNT) return;
+    #ifdef PDP8_E
+    if((_mb & 7)==0) _ttys[id].flags |= TTYOUT_M; //TFL
+    if((_mb & 7)==5) { //TSK
+        if(_ttys[id].flags&014) ADVANCE_PC;
+    } else {
+    #endif
+    if(_mb&1) {
+        #ifdef DEBUG
+            printf(" TSF(%d)", id);
+        #endif
+        if(_ttys[id].flags&TTYOUT_M) ADVANCE_PC; //TSF
+    }
+    if(_mb&2) {
+        #ifdef DEBUG
+            printf(" TCF(%d)", id);
+        #endif
+        _ttys[id].flags &= ~TTYOUT_M; //TCF
+    }
+    if(_mb&4) {
+        #ifdef DEBUG
+            printf(" TPC(%d)", id);
+        #endif
+        _ttys[id].out = _l_ac; //TPC
+    }
+    #ifdef PDP8_E
+    }
+    #endif
 }
 
