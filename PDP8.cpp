@@ -1,7 +1,7 @@
 #ifdef DEBUG
 #include <cstdio>
 #endif
-#include "PDP8.hpp"
+#include "PDP8.h"
 
 #define DF_M 00007
 #define U_M 00100
@@ -39,6 +39,10 @@ enum {
 #define I_M 00400
 #define PAGE_M 07600
 #define OFFSET_M 00177
+
+PDP8::PDP8(PDP8Memory* ram) {
+    _ram = ram;
+}
 
 void PDP8::reset() {
     _l_ac = 0;
@@ -97,17 +101,17 @@ void PDP8::loadAddress() {
 }
 void PDP8::deposit(bool advance) {
     _mb = _sr & 07777;
-    _ram[_ma] = _mb;
+    _ram->set(_ma, _mb);
     if(advance) _ma = (_if_pc & IF_M) | ((_ma + 1) & 07777);
 }
 int PDP8::examine(bool advance) {
-    _mb = _ram[_ma];
+    _mb = _ram->get(_ma);
     if(advance) _ma = (_if_pc & IF_M) | ((_ma + 1) & 07777);
     return _mb & 07777;
 }
 
 int PDP8::getPC() {
-    return _if_pc;
+    return _if_pc & 07777;
 }
 int PDP8::getMB() {
     return _mb & 07777;
@@ -118,13 +122,26 @@ int PDP8::getMA() {
 int PDP8::getLAC() {
     return _l_ac;
 }
+int PDP8::getMQ() {
+  //TODO
+    return 0;
+}
+int PDP8::getIF() {
+    return (_if_pc >> 12) & 7;
+}
+int PDP8::getDF() {
+  //TODO
+    return 0;
+}
 bool PDP8::isHalted() {
     return _sr & HALT_M;
 }
 int PDP8::getState() {
     return _ms;
 }
-
+int PDP8::getInstruction() {
+    return _ir;
+}
 #define ADVANCE_PC _if_pc = (_if_pc & 070000) | ((_if_pc + 1) & 07777)
 
 void PDP8::step() {
@@ -140,7 +157,7 @@ void PDP8::step() {
             #endif
         
             //get instruction word
-            _mb = _ram[_ma];
+            _mb = _ram->get(_ma);
             _ir = (_mb >> 9) & 7;
         
             ADVANCE_PC;
@@ -393,10 +410,10 @@ void PDP8::step() {
             
         case DEFER_STATE:
             //autoincrement
-            _mb = _ram[_ma];
+            _mb = _ram->get(_ma);
             if((_ma & 07770) == 00010) {
                 _mb++;
-                _ram[_ma] = _mb & 07777;
+                _ram->set(_ma, _mb & 07777);
             }
             //fetch pointer
             _ma = (_mb & 07777) | ((_flags & DF_M) << 12);
@@ -404,7 +421,7 @@ void PDP8::step() {
             break;
             
         case EXECUTE_STATE:
-            _mb = _ram[_ma] & 07777;
+            _mb = _ram->get(_ma) & 07777;
             if(_mb & 04000) _mb |= 0xF000;
         
             switch(_ir) {
@@ -436,7 +453,7 @@ void PDP8::step() {
                     _if_pc = (_if_pc & IF_M) | (_ma & 07777);
                     break;
             }
-            _ram[_ma] = _mb & 07777;
+            _ram->set(_ma, _mb & 07777);
             _ms = FETCH_STATE;
             break;
             

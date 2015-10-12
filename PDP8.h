@@ -10,8 +10,15 @@
     #define PDP8_TTY_COUNT 2
 #endif
 
+class PDP8Memory {
+    public:
+        virtual uint16_t get(int addr) = 0;
+        virtual void set(int addr, uint16_t data) = 0;
+};
+
 class PDP8 {
     public:
+        PDP8(PDP8Memory* ram);
         void reset();
         void step();
         void setSwitches(int);
@@ -23,7 +30,11 @@ class PDP8 {
         int getMA();
         int getMB();
         int getLAC();
+        int getMQ();
+        int getIF();
+        int getDF();
         int getState();
+        int getInstruction();
         bool isHalted();
             
         bool isOutputReady(int id = 0);
@@ -38,7 +49,7 @@ class PDP8 {
     
     
     private:
-        int16_t _ram[PDP8_RAM_SIZE]; //12bits
+        PDP8Memory* _ram; //12bits
         int16_t _l_ac; //13 bits
         int16_t _mq; // 12bits
         int16_t _if_pc; //15bits
