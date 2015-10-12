@@ -1,0 +1,3 @@
+Physical PDP 8 simulator for Arduino-compatible microcontroller
+
+Currently targeting a Teensy 3.x with i2c FRAM and LED matrices from Adafruit.
