@@ -42,9 +42,6 @@ enum {
 
 PDP8::PDP8(PDP8Memory* ram) {
     _ram = ram;
-}
-
-void PDP8::reset() {
     _l_ac = 0;
     _if_pc = 0;
     _flags = 0;
@@ -52,6 +49,18 @@ void PDP8::reset() {
         _ttys[i].flags = TTYIE_M;
     }
     _ms = FETCH_STATE;
+    _sr |= HALT_M;
+}
+
+void PDP8::start() {
+    _l_ac = 0;
+    _sr &= ~HALT_M;
+}
+
+void PDP8::halt() {
+    _sr |= HALT_M;
+}
+void PDP8::resume() {
     _sr &= ~HALT_M;
 }
 
@@ -99,6 +108,12 @@ void PDP8::setSwitches(int sw) {
 void PDP8::loadAddress() {
     _if_pc = _ma = (_if_pc & IF_M) | (_sr & 07777);
 }
+
+void PDP8::setFields(int i, int d) {
+    _if_pc = (_if_pc & ~IF_M) | ((i & 07) << 12);
+    _flags = (_flags & ~DF_M) | (d & 07);
+}
+
 void PDP8::deposit(bool advance) {
     _mb = _sr & 07777;
     _ram->set(_ma, _mb);
@@ -130,8 +145,7 @@ int PDP8::getIF() {
     return (_if_pc >> 12) & 7;
 }
 int PDP8::getDF() {
-  //TODO
-    return 0;
+    return _flags & DF_M;
 }
 bool PDP8::isHalted() {
     return _sr & HALT_M;
@@ -144,9 +158,12 @@ int PDP8::getInstruction() {
 }
 #define ADVANCE_PC _if_pc = (_if_pc & 070000) | ((_if_pc + 1) & 07777)
 
-void PDP8::step() {
-    if(_sr & HALT_M) return;
-    
+void PDP8::cycle() {
+    if((_ms == FETCH_STATE) && (_sr & HALT_M)) return;
+    singleStep();
+}
+
+void PDP8::singleStep() {
     switch(_ms) {
         case FETCH_STATE:
             //get extended address

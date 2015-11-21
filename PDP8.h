@@ -19,12 +19,17 @@ class PDP8Memory {
 class PDP8 {
     public:
         PDP8(PDP8Memory* ram);
-        void reset();
-        void step();
+        void start();
+        void singleStep();
         void setSwitches(int);
         void loadAddress();
         void deposit(bool = false);  
         int examine(bool = false);
+        void halt();
+        void resume();
+        void setFields(int i, int d);
+    
+        void cycle();
     
         int getPC();
         int getMA();

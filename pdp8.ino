@@ -37,192 +37,133 @@ void drawPixel(uint16_t x, uint16_t y, boolean state) {
     }
 }
 
+#define DEBOUNCE_DEPTH 50
+#define DEBOUNCE_RATE 1000
+#define CPU_RATE 2
+elapsedMicros sinceInput, sinceCPU;
+uint32_t switchHistory[DEBOUNCE_DEPTH];
+uint32_t switchHighMask, switchLowMask, switchNow, switchPrev;
+int character;
+uint8_t buttons;
+
+
 void setup() {
     Serial.begin(115200);
-    /*pinMode(2, INPUT_PULLUP);
-    pinMode(3, INPUT_PULLUP);
-    pinMode(4, INPUT_PULLUP);
-    pinMode(13, OUTPUT);*/
   
-    left.begin(0x71);
-    right.begin(0x70);
+    for(int i = 1; i <= 12; ++i) {
+        pinMode(i,INPUT_PULLUP);
+    }
+    
+    for(int i = 14; i <= 17; ++i) {
+        pinMode(i,INPUT_PULLUP);
+    }
+    for(int i = 20; i <= 23; ++i) {
+        pinMode(i,INPUT_PULLUP);
+    }
+    
+    switchNow = switchPrev = 0xFFFFFFFF;
+    for(int i = 0; i < DEBOUNCE_DEPTH; ++i) {
+        switchHistory[i] = 0xFFFFFFFF;
+    }
+    
+    left.begin(0x70);
+    right.begin(0x71);
     ram.begin(0x50, 0x51);
-  
-    pdp.reset();
-    
-    pdp.setSwitches(00200);
-    pdp.loadAddress();
-    pdp.setSwitches(07200); //CLA
-    pdp.deposit(true);
-    pdp.setSwitches(01000); //TAD 0000
-    pdp.deposit(true);
-    pdp.setSwitches(07001); //IAC
-    pdp.deposit(true);
-    pdp.setSwitches(03000); //DCA 0000
-    pdp.deposit(true);
-    pdp.setSwitches(01000); //TAD 0000
-    pdp.deposit(true);
-    pdp.setSwitches(07402); //HALT
-    pdp.deposit(true);
-    pdp.setSwitches(00200);
-    pdp.loadAddress();
-    
-    /*pdp.setSwitches(00200);
-    pdp.loadAddress();
-    pdp.setSwitches(07200);
-    pdp.deposit(true);
-    pdp.setSwitches(07100);
-    pdp.deposit(true);
-    pdp.setSwitches(01220);
-    pdp.deposit(true);
-    pdp.setSwitches(03010);
-    pdp.deposit(true);
-    pdp.setSwitches(07000);
-    pdp.deposit(true);
-    pdp.setSwitches(01410);
-    pdp.deposit(true);
-    pdp.setSwitches(07450);
-    pdp.deposit(true);
-    pdp.setSwitches(07402);
-    pdp.deposit(true);
-    pdp.setSwitches(04212);
-    pdp.deposit(true);
-    pdp.setSwitches(05204);
-    pdp.deposit(true);
-    pdp.setSwitches(00000);
-    pdp.deposit(true);
-    pdp.setSwitches(06046);
-    pdp.deposit(true);
-    pdp.setSwitches(06041);
-    pdp.deposit(true);
-    pdp.setSwitches(05214);
-    pdp.deposit(true);
-    pdp.setSwitches(07200);
-    pdp.deposit(true);
-    pdp.setSwitches(05612);
-    pdp.deposit(true);
-    pdp.setSwitches(00220);
-    pdp.deposit(true);
-    pdp.setSwitches(00310);
-    pdp.deposit(true);
-    pdp.setSwitches(00305);
-    pdp.deposit(true);
-    pdp.setSwitches(00314);
-    pdp.deposit(true);
-    pdp.setSwitches(00314);
-    pdp.deposit(true);
-    pdp.setSwitches(00317);
-    pdp.deposit(true);
-    pdp.setSwitches(00240);
-    pdp.deposit(true);
-    pdp.setSwitches(00327);
-    pdp.deposit(true);
-    pdp.setSwitches(00317);
-    pdp.deposit(true);
-    pdp.setSwitches(00322);
-    pdp.deposit(true);
-    pdp.setSwitches(00314);
-    pdp.deposit(true);
-    pdp.setSwitches(00304);
-    pdp.deposit(true);
-    pdp.setSwitches(00241);
-    pdp.deposit(true);
-    pdp.setSwitches(0);
-    pdp.deposit(true);
-    
-    pdp.setSwitches(00200);
-    pdp.loadAddress();*/
-    
-    /*pdp.setSwitches(07756);
-    pdp.loadAddress();
-    
-    pdp.setSwitches(06032);
-    pdp.deposit(true);
-    pdp.setSwitches(06031);
-    pdp.deposit(true);
-    pdp.setSwitches(05357);
-    pdp.deposit(true);
-    pdp.setSwitches(06036);
-    pdp.deposit(true);
-    pdp.setSwitches(07106);
-    pdp.deposit(true);
-    pdp.setSwitches(07006);
-    pdp.deposit(true);
-    pdp.setSwitches(07510);
-    pdp.deposit(true);
-    pdp.setSwitches(05357);
-    pdp.deposit(true);
-    pdp.setSwitches(07006);
-    pdp.deposit(true);
-    pdp.setSwitches(06031);
-    pdp.deposit(true);
-    pdp.setSwitches(05367);
-    pdp.deposit(true);
-    pdp.setSwitches(06034);
-    pdp.deposit(true);
-    pdp.setSwitches(07420);
-    pdp.deposit(true);
-    pdp.setSwitches(03776);
-    pdp.deposit(true);
-    pdp.setSwitches(03376);
-    pdp.deposit(true);
-    pdp.setSwitches(05356);
-    pdp.deposit(true);
-    pdp.setSwitches(0);
-    pdp.deposit(true);
-    pdp.setSwitches(0);
-    pdp.deposit(true);
-    pdp.setSwitches(07756);
-    pdp.loadAddress();*/
-    
-    
 }
 
-int c;
+boolean buttonTriggered(uint32_t mask) {
+    return (switchNow & mask && !(switchPrev & mask));
+}
 
-void loop() {
-    //digitalWrite(13, LOW);
-    /*if(digitalRead(3)) {
-        pdp.reset();
-        pdp.setSwitches(07777);
-        pdp.loadAddress();
-        Serial.println("Entered Bin loader");
+void loop() {    
+    if(sinceInput > DEBOUNCE_RATE) {
+        switchHighMask = 0xFFFFFFFF;
+        switchLowMask = 0;
+        for(int i = 1; i < DEBOUNCE_DEPTH; ++i) {
+            switchHistory[i] = switchHistory[i-1];
+            switchHighMask &= switchHistory[i];
+            switchLowMask |= switchHistory[i];
+        }
+        switchHistory[0] = 0;
+        for(int i = 1; i <= 12; ++i) {
+            switchHistory[0] <<= 1;
+            switchHistory[0] |= digitalRead(i);
+        }
+        for(int i = 23; i >= 20; --i) {
+            switchHistory[0] <<= 1;
+            switchHistory[0] |= digitalRead(i);
+        }
+        for(int i = 17; i >= 14; --i) {
+            switchHistory[0] <<= 1;
+            switchHistory[0] |= digitalRead(i);
+        }
+        switchHighMask &= switchHistory[0];
+        switchLowMask |= switchHistory[0];
+        
+        switchPrev = switchNow;
+        switchNow |= switchHighMask;
+        switchNow &= switchLowMask;
+        sinceInput = 0;
     }
-    if(digitalRead(4)) {
-        pdp.reset();
-        pdp.setSwitches(00200);
-        pdp.loadAddress();
-        digitalWrite(13, HIGH);
-        Serial.println("Entered hello");
+    
+    pdp.setSwitches((~switchNow >> 8) & 07777);
+    if(buttonTriggered(1)) {
+        pdp.deposit(true);
     }
-    if(digitalRead(2)) {*/
-        if(Serial.available() && pdp.isInputReady()) {
-            c = Serial.read();
-            pdp.setInput(c);
-            Serial.println(c, 8);
+    if(buttonTriggered(2)) {
+        pdp.singleStep();
+    }
+    if(buttonTriggered(4)) {
+        pdp.halt();
+    }
+    if(buttonTriggered(8)) {
+        pdp.examine(true);
+    }
+    if(buttonTriggered(16)) {
+        pdp.resume();
+    }
+    if(buttonTriggered(32)) {
+        pdp.start();
+    }
+    if(buttonTriggered(64)) {
+        pdp.setFields((switchNow >> 3) & 7, switchNow & 7);
+    }
+    if(buttonTriggered(128)) {
+        pdp.loadAddress();
+    }
+
+    if(Serial.available() && pdp.isInputReady()) {
+        character = Serial.read();
+        pdp.setInput(character);
+        Serial.println(character, 8);
+    }
+    if(pdp.isOutputReady()) {
+        character = pdp.getOutput();
+        if(character > 0) {
+            Serial.write(character & 0177);
+            digitalWrite(13, HIGH);
         }
-        if(pdp.isOutputReady()) {
-            c = pdp.getOutput();
-            if(c > 0) {
-                Serial.write(c & 0177);
-                digitalWrite(13, HIGH);
-            }
-        }
-        pdp.step();
-        right.clear();
-        left.clear();
-        for(int i = 0; i < 13; ++i) {
-            drawPixel(12-i,0,(pdp.getPC() & (1 << i))? LED_ON : LED_OFF);
-            drawPixel(12-i,1,(pdp.getMA() & (1 << i))? LED_ON : LED_OFF);
-            drawPixel(12-i,2,(pdp.getMB() & (1 << i))? LED_ON : LED_OFF);
-            drawPixel(12-i,3,(pdp.getLAC() & (1 << i))? LED_ON : LED_OFF);
-            drawPixel(12-i,4,(pdp.getMQ() & (1 << i))? LED_ON : LED_OFF);
-            drawPixel(12-i,5,(((pdp.getIF() << 3) | pdp.getDF()) & (1 << i))? LED_ON : LED_OFF);
-        }
-        drawPixel(14,pdp.getInstruction(),LED_ON);
-        drawPixel(15,pdp.getState(),LED_ON);
-        right.writeDisplay();
-        left.writeDisplay();
-        delay(100);
-    //}
+    }
+
+    if(sinceCPU > CPU_RATE) {
+        pdp.cycle();
+        sinceCPU = 0;
+    }
+    
+    right.clear();
+    left.clear();
+    for(int i = 0; i < 13; ++i) {
+        drawPixel(15-i,0,(pdp.getPC() & (1 << i))? LED_ON : LED_OFF);
+        drawPixel(15-i,1,(pdp.getMA() & (1 << i))? LED_ON : LED_OFF);
+        drawPixel(15-i,2,(pdp.getMB() & (1 << i))? LED_ON : LED_OFF);
+        drawPixel(15-i,3,(pdp.getLAC() & (1 << i))? LED_ON : LED_OFF);
+        drawPixel(15-i,4,(pdp.getMQ() & (1 << i))? LED_ON : LED_OFF);
+        drawPixel(15-i,5,(((pdp.getIF() << 3) | pdp.getDF()) & (1 << i))? LED_ON : LED_OFF);
+        //drawPixel(15-i,6,((switchNow >> 12) & (1 << i))? LED_ON : LED_OFF);
+        //drawPixel(15-i,7,((switchNow & 07777) & (1 << i))? LED_ON : LED_OFF);
+    }
+    drawPixel(pdp.getInstruction(),6,LED_ON);
+    drawPixel(pdp.getState(),7,LED_ON);
+    right.writeDisplay();
+    left.writeDisplay();
 }
